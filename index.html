@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+    <title>Socket.IO chat</title>
+    <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font: 13px Helvetica, Arial; }
+    form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+    #m { border: 0; padding: 10px; width: 75%; margin-right: .5%; }
+    form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+    #messages { list-style-type: none; margin: 0; padding: 0; }
+    #messages li { padding: 5px 10px; }
+    #messages li:nth-child(odd) { background: #eee; }
+    #username { border: 0; padding: 10px; width: 15%; margin-right: .5%; }
+    #submit { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <!-- <div style="display: flex; flex: 1; width: 100%; space-between: center;">
+        <div style="flex: 7;">
+            <span style="font-size: 30px;">Messages</span>
+            <ul id="messages"></ul>
+            <h1 id="typing"></h1>
+            <h1 id="connection"></h1>
+        </div>
+        <div style="flex: 3; align-content: center;">
+            <span style="font-size: 30px;" onclick="clearSelected()">Users</span>
+            <ul id="connectedusers" style="margin-top: 20px;">
+            </ul>
+        </div>
+    </div>
+    <form action="" id="form">
+        <input type="text" id="username" value="" placeholder="Username"/><input id="m" autocomplete="off" onchange="emitTyping()" /><button>Send</button>
+    </form> -->
+    <script src="bundle.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="./jquery.min.js">
+    </script>
+    <script>
+    var username = prompt('Enter username');
+    $('#username').val(username);
+    var target;
+    var state = {
+        everyone: [],
+        selected: ''
+    };
+    var socket = io();
+    $(function () {
+        $('form').on('submit', (e)=>{
+            e.preventDefault();
+            console.log('submit');
+            if(state.selected === ""){
+                state.everyone.push({sender: "you", msg: $('#m')});
+                socket.emit('chat message', {message: $('#m').val(), for: $('#username')[0].value});
+                document.getElementById('messages').innerHTML += ('<li><h3>You: '+$('#m').val()+'</h3></li>');
+            } else {
+                console.log('define',state[state.selected], state.selected);
+                if(state[state.selected] === undefined){
+                    state[state.selected] = [{sender: "you", msg: $('#m')}]
+                } else {
+                    state[state.selected] = ([...state[state.selected]].push({sender: "you", msg:$('#m').val()}))
+                }
+                document.getElementById('messages').innerHTML += ('<li><h3>PRIVATE You: '+$('#m').val()+'</h3></li>');
+                // state[state.selected] = [...state[state.selected]].push({sender: "you", msg:$('#m')}) || [{sender: "you", msg: $('#m')}];
+                socket.emit('chat message', {message: $('#m').val(), for: $('#username')[0].value, to: state.selected})
+            }
+            // log('here');
+            $('#m').val('');
+            // return false;
+        });
+        socket.on('chat message', function(msg){
+            // console.log('got message', msg)
+            var sender = (msg.for || 'anon')
+            var isPrivate = (msg.to !== undefined)? "PRIVATE ": "";
+            $('#messages').append($('<li>').text(isPrivate + sender + ": "+msg.message));
+            console.log(state.everyone);
+            state.everyone.push({sender: sender, msg: msg.message})
+        });
+        socket.on('typing', function(content){
+            console.log('typing received',content.user);
+            document.getElementById('typing').innerHTML = (content.user+' is typing');
+            setTimeout(function(){
+                document.getElementById('typing').innerHTML = '';
+                // console.log('hidden');
+            }, 5000)
+        });
+        socket.on('user connection', function(msg){
+            document.getElementById('connection').innerHTML += ('<br />'+msg);
+            setTimeout(()=>{
+                document.getElementById('connection').innerHTML = '';
+            }, 5000);
+        });
+        socket.on('users', function(data){
+            let out = '';
+            for (var i = 0; i < data.length; i++) {
+                out += `<li onclick="setSelected('${data[i]}')">`+data[i]+'</li>'
+            }
+            document.getElementById('connectedusers').innerHTML = out;
+            // console.log('sockets are ', data);
+        });
+    });
+    function emitTyping(){
+        let username = document.getElementById('username').value;
+        if(username === '') username = undefined;
+        console.log('currently writing',username);
+        socket.emit('typing', {user: (username || 'some user')});
+    }
+    function setSelected(id){
+        state.selected = id;
+        console.log('state', state)
+        return;
+        // show specific messages
+        // for (var i = 0; i < state.id.length; i++) {
+        //     $('#messages').push($('<li>').text(Object.keys(state.id[i]) + ": "+state.id[i].message));
+        // }
+        document.getElementById('messages').innerHTML = '';
+        for (var msg in state[id]) {
+            $('#messages').append($('<li>').text(msg.sender + ": "+msg.msg));
+        }
+    }
+    function clearSelected(){
+        console.log('clear selected')
+        state.selected = '';
+        return;
+        // now change the message shown
+        document.getElementById('messages').innerHTML = '';
+        for (var msg in state.everyone) {
+            $('#messages').append($('<li>').text(msg.sender + ": "+msg.msg));
+        }
+    }
+    function log(msg){
+        setTimeout(()=>{
+            console.log(msg || 'log')
+        }, 500);
+    }
+    </script>
+</body>
+</html>
