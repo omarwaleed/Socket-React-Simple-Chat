@@ -23,6 +23,7 @@ io.on('connection', function(socket){
         console.log('a user disconnected');
         io.emit('user connection', 'user disconnected');
         io.emit('users', Object.keys(io.sockets.sockets));
+        console.log(Object.keys(io.sockets.sockets));
     });
     socket.on('chat message', function(msg){
         console.log('id of sender is '+socket.id);
