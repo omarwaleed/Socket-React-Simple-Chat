@@ -13376,17 +13376,94 @@ var App = function (_Component) {
 
         var _this = _possibleConstructorReturn(this, (App.__proto__ || Object.getPrototypeOf(App)).call(this));
 
-        _this.state = { selected: '', message: '', everyone: [], messagesContainer: [] };
+        _this.state = { selected: '', message: '', everyone: [], messagesContainer: [], usersContainer: [] };
         _this.handleSubmit = _this.handleSubmit.bind(_this);
         _this.messageChange = _this.messageChange.bind(_this);
         _this.emitTyping = _this.emitTyping.bind(_this);
 
+        _this.setSelected = _this.setSelected.bind(_this);
+
         // this.messageContent = "";
         _this.username = prompt('Enter username');
+
+        socket.emit('user:name', _this.username);
+        // socket.on('user:in', (data)=>this._handleUserIn(data))
+        // socket.on('user:out', (socketid)=>this._handleUserOut(socketid))
+        socket.on('chat message', function (msg) {
+            return _this._handleChatMessage(msg);
+        });
+        socket.on('typing', function (content) {
+            console.log('typing received', content.user);
+            document.getElementById('typing').innerHTML = content.user + ' is typing';
+            setTimeout(function () {
+                document.getElementById('typing').innerHTML = '';
+                console.log('hidden');
+            }, 5000);
+        });
+        socket.on('user connection', function (msg) {
+            document.getElementById('connection').innerHTML += '<br />' + msg;
+            setTimeout(function () {
+                document.getElementById('connection').innerHTML = '';
+            }, 5000);
+        });
+        socket.on('users', function (data) {
+            _this._handleUserChange(data);
+        });
         return _this;
     }
 
     _createClass(App, [{
+        key: '_handleChatMessage',
+        value: function _handleChatMessage(msg) {
+            console.log('got message', msg);
+            var sender = msg.for || 'anon';
+            // var isPrivate = (msg.to !== undefined)? "PRIVATE ": "";
+            // $('#messages').append($('<li>').text(isPrivate + sender + ": "+msg.message));
+            var isPrivate = msg.to !== undefined ? true : false;
+            this.state.everyone.push({ sender: sender, msg: msg.message });
+            var currentContainer = this.state.messagesContainer;
+            currentContainer.push(_react2.default.createElement(Message, { isPrivate: isPrivate, sender: 'You', message: msg.message }));
+            this.setState({ messagesContainer: currentContainer });
+            // console.log(this.state.everyone);
+        }
+    }, {
+        key: '_handleUserChange',
+        value: function _handleUserChange(data) {
+            // let out = '';
+            var container = [];
+            // let that = this;
+            for (var i = 0; i < data.length; i++) {
+                // out += `<li onclick="setSelected('${data[i]}')">`+data[i]+'</li>'
+                // console.log('context', this);
+                container.push(_react2.default.createElement(User, { toSelect: data[i], name: data[i], clickable: this.setSelected.bind(this) }));
+            }
+            this.setState({ usersContainer: container });
+            // document.getElementById('connectedusers').innerHTML = out;
+            // console.log('sockets are ', data);
+        }
+    }, {
+        key: '_handleUserIn',
+        value: function _handleUserIn(data) {
+            console.log(data);
+            var container = this.state.usersContainer;
+            container.push(data);
+            this.setState({ usersContainer: container });
+        }
+    }, {
+        key: '_handleUserOut',
+        value: function _handleUserOut(id) {
+            var container = this.state.usersContainer.filter(function (userData) {
+                if (userData.id !== id) return userData;
+            });
+        }
+    }, {
+        key: 'setSelected',
+        value: function setSelected(id) {
+            // this.state.selected = id;
+            console.log('setting selected');
+            this.setState({ selected: id });
+        }
+    }, {
         key: 'handleSubmit',
         value: function handleSubmit(e) {
             e.preventDefault();
@@ -13402,9 +13479,9 @@ var App = function (_Component) {
                 this.state.everyone.push({ sender: "you", msg: toSend });
                 socket.emit('chat message', { message: toSend, for: { currentUser: currentUser } });
                 // document.getElementById('messages').innerHTML += ('<li><h3>You: '+toSend+'</h3></li>');
-                var _currentContainer = this.state.messagesContainer;
-                // currentContainer.push(<Message isPrivate={false} sender="You" message={toSend} />)
-                this.setState({ messagesContainer: _currentContainer });
+                var currentContainer = this.state.messagesContainer;
+                currentContainer.push(_react2.default.createElement(Message, { isPrivate: false, sender: 'You', message: toSend }));
+                this.setState({ messagesContainer: currentContainer });
             } else {
                 console.log('to someone');
                 console.log('define', this.state[this.state.selected], this.state.selected);
@@ -13413,7 +13490,10 @@ var App = function (_Component) {
                 } else {
                     this.state[this.state.selected] = [].concat(_toConsumableArray(this.state[this.state.selected])).push({ sender: "you", msg: toSend });
                 }
-                document.getElementById('messages').innerHTML += '<li><h3>PRIVATE You: ' + toSend + '</h3></li>';
+                // document.getElementById('messages').innerHTML += ('<li><h3>PRIVATE You: '+toSend+'</h3></li>');
+                var _currentContainer = this.state.messagesContainer;
+                _currentContainer.push(_react2.default.createElement(Message, { isPrivate: true, sender: 'You', message: toSend }));
+                this.setState({ messagesContainer: _currentContainer });
                 // this.state[this.state.selected] = [...this.state[this.state.selected]].push({sender: "you", msg:toSend}) || [{sender: "you", msg: toSend}];
                 socket.emit('chat message', { message: toSend, for: $('#username')[0].value, to: this.state.selected });
             }
@@ -13450,7 +13530,12 @@ var App = function (_Component) {
     }, {
         key: 'render',
         value: function render() {
-
+            var messageChildren = _react2.default.Children.map(this.state.messagesContainer, function (child) {
+                return child;
+            });
+            var userChildren = _react2.default.Children.map(this.state.usersContainer, function (child) {
+                return child;
+            });
             return _react2.default.createElement(
                 'div',
                 null,
@@ -13468,7 +13553,7 @@ var App = function (_Component) {
                         _react2.default.createElement(
                             'ul',
                             { id: 'messages' },
-                            this.state.messagesContainer
+                            messageChildren
                         ),
                         _react2.default.createElement('h1', { id: 'typing' }),
                         _react2.default.createElement('h1', { id: 'connection' })
@@ -13481,7 +13566,11 @@ var App = function (_Component) {
                             { style: { fontSize: '30px' }, onClick: this.clearSelected.bind(this) },
                             'Users'
                         ),
-                        _react2.default.createElement('ul', { id: 'connectedusers', style: { marginTop: '20px' } })
+                        _react2.default.createElement(
+                            'ul',
+                            { id: 'connectedusers', style: { marginTop: '20px' } },
+                            userChildren
+                        )
                     )
                 ),
                 _react2.default.createElement(
@@ -13497,49 +13586,18 @@ var App = function (_Component) {
                 )
             );
         }
-    }, {
-        key: 'ComponentDidMount',
-        value: function ComponentDidMount() {
-            socket.on('chat message', function (msg) {
-                // console.log('got message', msg)
-                var sender = msg.for || 'anon';
-                // var isPrivate = (msg.to !== undefined)? "PRIVATE ": "";
-                // $('#messages').append($('<li>').text(isPrivate + sender + ": "+msg.message));
-                var isPrivate = msg.to !== undefined ? true : false;
-                currentContainer.push(_react2.default.createElement(Message, { isPrivate: isPrivate, sender: 'You', message: toSend }));
-                console.log(state.everyone);
-                state.everyone.push({ sender: sender, msg: msg.message });
-            });
-            socket.on('typing', function (content) {
-                console.log('typing received', content.user);
-                document.getElementById('typing').innerHTML = content.user + ' is typing';
-                setTimeout(function () {
-                    document.getElementById('typing').innerHTML = '';
-                    console.log('hidden');
-                }, 5000);
-            });
-            socket.on('user connection', function (msg) {
-                document.getElementById('connection').innerHTML += '<br />' + msg;
-                setTimeout(function () {
-                    document.getElementById('connection').innerHTML = '';
-                }, 5000);
-            });
-            socket.on('users', function (data) {
-                var out = '';
-                for (var i = 0; i < data.length; i++) {
-                    out += '<li onclick="setSelected(\'' + data[i] + '\')">' + data[i] + '</li>';
-                }
-                document.getElementById('connectedusers').innerHTML = out;
-                // console.log('sockets are ', data);
-            });
-        }
+
+        // ComponentDidMount(){
+        //
+        // }
+
     }]);
 
     return App;
 }(_react.Component);
 
 var Message = function Message(props) {
-    console.log('prop message', props.message);
+    // console.log('prop message', props.message)
     if (props.isPrivate) {
         return _react2.default.createElement(
             'li',
@@ -13568,6 +13626,18 @@ var Message = function Message(props) {
             props.message
         );
     }
+};
+
+var User = function User(props) {
+    // console.log('props', props);
+    var clickable = function clickable() {
+        props.clickable(props.toSelect);
+    };
+    return _react2.default.createElement(
+        'li',
+        { onClick: clickable },
+        props.name
+    );
 };
 
 _reactDom2.default.render(_react2.default.createElement(App, null), document.getElementById('app'));

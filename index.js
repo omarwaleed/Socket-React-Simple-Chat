@@ -23,8 +23,13 @@ io.on('connection', function(socket){
         console.log('a user disconnected');
         io.emit('user connection', 'user disconnected');
         io.emit('users', Object.keys(io.sockets.sockets));
+        io.emit('user:out', socket.id);
         console.log(Object.keys(io.sockets.sockets));
     });
+    socket.on('user:name', function(data){
+        console.log('user:name', data);
+        io.emit('user:in', {name: data, id: socket.id})
+    })
     socket.on('chat message', function(msg){
         console.log('id of sender is '+socket.id);
         console.log(Object.keys(io.sockets.sockets));
