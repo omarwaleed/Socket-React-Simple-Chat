@@ -2,6 +2,23 @@ import React, {Component} from 'react';
 import ReactDOM from 'react-dom';
 import io from 'socket.io-client';
 
+import * as firebase from 'firebase';
+
+var config = {
+    apiKey: "AIzaSyAHcq3Ws8TR5FRezToGz8ZBVrIPSChN9Rs",
+    authDomain: "modernweb-socket-task.firebaseapp.com",
+    databaseURL: "https://modernweb-socket-task.firebaseio.com",
+    projectId: "modernweb-socket-task",
+    storageBucket: "modernweb-socket-task.appspot.com",
+    messagingSenderId: "945693240475"
+};
+firebase.initializeApp(config);
+
+const db = firebase.database();
+const rootRef = db.ref().child('socket');
+const usersRef = rootRef.child('users');
+const msgsRef = rootRef.child('messages');
+
 // import socket from '/socket.io/socket.io.js';
 
 let socket = io();
@@ -10,7 +27,7 @@ let socket = io();
 class App extends Component {
     constructor(){
         super();
-        this.state = {selected: '', message: '', everyone: [], messagesContainer: [], usersContainer: []};
+        this.state = {selected: '', message: '', everyone: [], messagesContainer: [], usersContainer: [], keyHolder: null};
         this.handleSubmit = this.handleSubmit.bind(this);
         this.messageChange = this.messageChange.bind(this);
         this.emitTyping = this.emitTyping.bind(this);
@@ -20,10 +37,12 @@ class App extends Component {
         // this.messageContent = "";
         this.username = prompt('Enter username');
 
-        socket.emit('user:name', this.username);
+        // socket.emit('user:name', this.username);
+        // usersRef.set({user: this.username})
         // socket.on('user:in', (data)=>this._handleUserIn(data))
         // socket.on('user:out', (socketid)=>this._handleUserOut(socketid))
         socket.on('chat message', (msg)=>this._handleChatMessage(msg));
+        msgsRef.on('value', (msg)=>this._handleChatMessage(msg.val()));
         socket.on('typing', function(content){
             console.log('typing received',content.user);
             document.getElementById('typing').innerHTML = (content.user+' is typing');
@@ -33,15 +52,40 @@ class App extends Component {
             }, 5000)
         });
         socket.on('user connection', function(msg){
+            console.log('connection', msg);
             document.getElementById('connection').innerHTML += ('<br />'+msg);
             setTimeout(()=>{
                 document.getElementById('connection').innerHTML = '';
             }, 5000);
         });
         socket.on('users', (data)=>{this._handleUserChange(data)});
+        usersRef.on('value', (data)=>this._handleUserChange(data.val()))
+    }
+
+    componentDidMount(){
+        msgsRef.on('value', (snap)=> this._handleChatMessage(snap.val().msg));
+        usersRef.on('value', (msg)=>{
+            console.log(msg);
+            document.getElementById('connection').innerHTML += ('<br />'+msg);
+            setTimeout(()=>{
+                document.getElementById('connection').innerHTML = '';
+            }, 5000);
+        })
+        // usersRef.set({user: this.username})
+        let newUser = usersRef.push();
+        newUser.set(this.username);
+        this.state.keyHolder = newUser;
+        console.log('holder', this.state.keyHolder);
+    }
+
+    componentWillUnmount(){
+        // usersRef.remove(this.state.keyHolder);
+        alert('called');
+        this.state.keyHolder.path.o[2].remove();
     }
 
     _handleChatMessage(msg){
+        if(msg === undefined) return;
         console.log('got message', msg)
         var sender = (msg.for || 'anon')
         // var isPrivate = (msg.to !== undefined)? "PRIVATE ": "";
@@ -49,20 +93,18 @@ class App extends Component {
         let isPrivate = (msg.to !== undefined)? true: false;
         this.state.everyone.push({sender: sender, msg: msg.message})
         let currentContainer = this.state.messagesContainer;
-        currentContainer.push(<Message isPrivate={isPrivate} sender="You" message={msg.message} />)
+        currentContainer.push(<Message isPrivate={isPrivate} sender={msg.for} message={msg.message} />)
         this.setState({messagesContainer: currentContainer})
         // console.log(this.state.everyone);
     }
 
     _handleUserChange(data){
-        // let out = '';
         let container = [];
-        // let that = this;
+        data = Object.values(data);
         for (var i = 0; i < data.length; i++) {
-            // out += `<li onclick="setSelected('${data[i]}')">`+data[i]+'</li>'
-            // console.log('context', this);
             container.push(<User toSelect={data[i]} name={data[i]} clickable={this.setSelected.bind(this)}/>)
         }
+        // container.push(<User toSelect={data} name={data} clickable={this.setSelected.bind(this)}/>)
         this.setState({usersContainer: container})
         // document.getElementById('connectedusers').innerHTML = out;
         // console.log('sockets are ', data);
@@ -100,24 +142,25 @@ class App extends Component {
             console.log('to everyone');
             this.state.everyone.push({sender: "you", msg: toSend});
             socket.emit('chat message', {message: toSend, for: {currentUser}});
-            // document.getElementById('messages').innerHTML += ('<li><h3>You: '+toSend+'</h3></li>');
-            let currentContainer = this.state.messagesContainer;
-            currentContainer.push(<Message isPrivate={false} sender="You" message={toSend} />)
-            this.setState({messagesContainer: currentContainer})
+            msgsRef.set({message: toSend, for: currentUser});
+            // let currentContainer = this.state.messagesContainer;
+            // currentContainer.push(<Message isPrivate={false} sender="You" message={toSend} />)
+            // this.setState({messagesContainer: currentContainer})
         } else {
             console.log('to someone');
             console.log('define',this.state[this.state.selected], this.state.selected);
-            if(this.state[this.state.selected] === undefined){
-                this.state[this.state.selected] = [{sender: "you", msg: toSend}]
-            } else {
-                this.state[this.state.selected] = ([...this.state[this.state.selected]].push({sender: "you", msg: toSend}))
-            }
+            // if(this.state[this.state.selected] === undefined){
+            //     this.state[this.state.selected] = [{sender: "you", msg: toSend}]
+            // } else {
+            //     this.state[this.state.selected] = ([...this.state[this.state.selected]].push({sender: "you", msg: toSend}))
+            // }
             // document.getElementById('messages').innerHTML += ('<li><h3>PRIVATE You: '+toSend+'</h3></li>');
-            let currentContainer = this.state.messagesContainer;
-            currentContainer.push(<Message isPrivate={true} sender="You" message={toSend} />)
-            this.setState({messagesContainer: currentContainer})
+            // let currentContainer = this.state.messagesContainer;
+            // currentContainer.push(<Message isPrivate={true} sender="You" message={toSend} />)
+            // this.setState({messagesContainer: currentContainer})
             // this.state[this.state.selected] = [...this.state[this.state.selected]].push({sender: "you", msg:toSend}) || [{sender: "you", msg: toSend}];
             socket.emit('chat message', {message: toSend, for: $('#username')[0].value, to: this.state.selected})
+            msgsRef.set({message: toSend, for: currentUser, to: this.state.selected});
         }
         // log('here');
         // toSend.val('');
